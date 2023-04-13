@@ -1,0 +1,82 @@
+# importing necessary packages
+import tensorflow as tf
+import numpy as np
+import keras
+import matplotlib.pyplot as plt
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+
+# importing and authenticating earth engine api
+import ee
+ee.Authenticate()
+ee.Initialize()
+
+# defining sourcing tiles
+lc = ee.ImageCollection('MODIS/006/MCD12Q1')
+lst = ee.ImageCollection('MODIS/006/MOD11A1')
+elv = ee.Image('USGS/SRTMGL1_003')
+
+# defining date parameters
+i_date = '2017-01-01'
+f_date = '2022-01-01'
+lst = lst.select('LST_Day_1km', 'QC_Day').filterDate(i_date, f_date)
+
+# mounting google drive
+from google.colab import drive
+drive.mount('/content/drive')
+
+# importing training data
+train = ImageDataGenerator(rescale=1/255)
+test = ImageDataGenerator(rescale=1/255)
+
+train_dataset = train.flow_from_directory(
+    '/content/drive/MyDrive/BAMBOT/TRAIN',
+    target_size=(8192,6386),
+    batch_size=172,
+    class_mode='binary')
+
+test_dataset = test.flow_from_directory(
+    '/content/drive/MyDrive/BAMBOT/TEST',
+    target_size=(8192,6386),
+    batch_size=23,
+    class_mode='binary')
+
+# defining convolutional model in tensorflow
+model = keras.Sequential()
+
+# Convolutional layer & maxpool layer 1
+model.add(keras.layers.Conv2D(32,(3,3),activation='relu',input_shape=(100,100,3)))
+model.add(keras.layers.MaxPool2D(2,2))
+
+# Convolutional layer & maxpool layer 2
+model.add(keras.layers.Conv2D(64,(3,3),activation='relu'))
+model.add(keras.layers.MaxPool2D(2,2))
+
+# Convolutional layer & maxpool layer 3
+model.add(keras.layers.Conv2D(128,(3,3),activation='relu'))
+model.add(keras.layers.MaxPool2D(2,2))
+
+# Convolutional layer & maxpool layer 4
+model.add(keras.layers.Conv2D(128,(3,3),activation='relu'))
+model.add(keras.layers.MaxPool2D(2,2))
+
+# Flattening the resulting image array to 1-D array
+model.add(keras.layers.Flatten())
+
+# 'Hidden' layer with 512 neurons and Rectified Linear Unit activation function 
+model.add(keras.layers.Dense(512,activation='relu'))
+
+# Output layer with single neuron which produces 0 for BAM or 1 for NOBAM 
+# Sigmoid activation function ensures model output is between 0 and 1
+model.add(keras.layers.Dense(1,activation='sigmoid'))
+
+# Optimizing layer
+model.compile(optimizer='adam',loss='binary_crossentropy',metrics=['accuracy'])
+
+# training model for 64 epochs
+# steps_per_epoch = train_imagesize/batch_size
+model.fit_generator(train_dataset,
+         steps_per_epoch = 28,
+         epochs = 64,
+         validation_data = test_dataset
+       
+         )
